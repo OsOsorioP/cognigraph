@@ -2,7 +2,7 @@
 FROM node:18-alpine
 
 # Establecer el directorio de trabajo
-WORKDIR /app
+WORKDIR ./
 
 # Instalar pnpm globalmente dentro del contenedor
 # Esta es la forma recomendada de usar pnpm en Docker
