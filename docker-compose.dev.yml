@@ -1,0 +1,80 @@
+services:
+  # --- Bases de Datos y Caché ---
+  postgres_db:
+    image: postgres:15.5-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cognigraph_net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cognigraph_net
+
+  # --- Servicios del Backend ---
+  auth_service:
+    build: ./backend/auth_service
+    container_name: auth_service
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./backend/auth_service:/app
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db/${POSTGRES_DB}
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - cognigraph_net
+
+  api_gateway:
+    build: ./backend/api_gateway
+    container_name: api_gateway
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend/api_gateway:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth_service
+    networks:
+      - cognigraph_net
+
+  # --- Servicio del Frontend ---
+  web_client:
+    build:
+      context: ./frontend/web_client
+      dockerfile: Dockerfile
+    container_name: web_client
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/web_client/app:/app
+      - /app/node_modules 
+    command: sh -c "pnpm install && pnpm dev"
+    networks:
+      - cognigraph_net
+
+volumes:
+  postgres_data:
+
+networks:
+  cognigraph_net:
+    driver: bridge
